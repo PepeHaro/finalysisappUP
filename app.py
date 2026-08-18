@@ -43,8 +43,8 @@ if token1 is None:
 if token2 is None:
     raise ValueError("No se encontró el token2 en los secretos de Streamlit")
 #FOTO
-ruta_foto = "https://raw.githubusercontent.com/PepeHaro/finalysisappUP/master/Fot.jpg"
-st.image(ruta_foto,caption= "José Federico Haro Velasco",use_column_width=True)
+ruta_foto = "https://raw.githubusercontent.com/PepeHaro/finalysisappUP/main/Fot.jpg"
+st.image(ruta_foto,caption= "José Federico Haro Velasco",use_container_width=True)
 st.sidebar.title("EXPLORE:bar_chart:")
 page = st.sidebar.selectbox("Select one", ["Company Overview","Sector Dashboard","Implied Volatility","News"])
 
@@ -961,7 +961,7 @@ if page == "News":
                         col1, col2 = st.columns([1, 4])  # Ajusta la proporción según sea necesario
                         with col1:
                             if article['urlToImage']:  # Verificar si hay una imagen disponible
-                                st.image(article['urlToImage'], use_column_width=True)
+                                st.image(article['urlToImage'], use_container_width=True)
                         with col2:
                             st.markdown(f"#### [{article['title']}]({article['url']})")
                             st.write(article['publishedAt'])

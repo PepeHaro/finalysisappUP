@@ -91,14 +91,20 @@ if page == "Company Overview":
             with col1:
                 st.subheader(info.get("longName", "Nombre de la empresa no disponible"))
 
-                # Mostrar el logo
+                # Mostrar el logo. Va en su propio try porque es decorativo: el
+                # servicio anterior (logo.clearbit.com) dejo de existir y su
+                # fallo de DNS abortaba toda la ficha de la empresa.
                 website = info.get('website')
                 if website:
-                    logo_url = f"https://logo.clearbit.com/{website.replace('http://','').replace('https://','').split('/')[0]}"
-                    response = requests.get(logo_url)
-                    if response.status_code == 200:
-                        logo_image = Image.open(BytesIO(response.content))
-                        st.image(logo_image)
+                    dominio = website.replace('http://', '').replace('https://', '').split('/')[0]
+                    try:
+                        logo_url = f"https://www.google.com/s2/favicons?domain={dominio}&sz=128"
+                        response = requests.get(logo_url, timeout=10)
+                        if response.status_code == 200:
+                            logo_image = Image.open(BytesIO(response.content))
+                            st.image(logo_image)
+                    except Exception:
+                        pass
 
                 # Mostrar datos solo si están disponibles
                 st.write(f"· WebPage: {website if website else 'N/A'}")

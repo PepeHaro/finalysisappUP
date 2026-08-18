@@ -45,6 +45,10 @@ if token2 is None:
 #FOTO
 ruta_foto = "https://raw.githubusercontent.com/PepeHaro/finalysisappUP/main/Fot.jpg"
 st.image(ruta_foto,caption= "José Federico Haro Velasco",use_container_width=True)
+st.caption(
+    "🏆 Proyecto final de Ingeniería Financiera — Universidad Panamericana. "
+    "Reconocido como el mejor proyecto del semestre."
+)
 st.sidebar.title("EXPLORE:bar_chart:")
 page = st.sidebar.selectbox("Select one", ["Company Overview","Sector Dashboard","Implied Volatility","News"])
 

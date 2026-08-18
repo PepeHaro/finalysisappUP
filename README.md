@@ -4,7 +4,9 @@
 
 **➡️ [Abrir la app](https://finalysisappup.streamlit.app/)** — no necesitas instalar nada.
 
-Análisis financiero por sector y volatilidad implícita. Proyecto final de Ingeniería Financiera (8º semestre, Universidad Panamericana).
+Análisis financiero por sector y volatilidad implícita.
+
+🏆 **Proyecto final de la clase de Ingeniería Financiera en la Universidad Panamericana (8º semestre), reconocido como el mejor proyecto del semestre.**
 
 ## Qué hace
 

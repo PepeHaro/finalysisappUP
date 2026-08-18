@@ -486,10 +486,14 @@ if page == "Sector Dashboard":
     # Descargar los datos del índice S&P 500 desde Yahoo Finance
         end_date = datetime.now().date()
         start_date = datetime(end_date.year - 1, end_date.month, end_date.day).date()
-        benchmark_data = yf.download('^GSPC', start=start_date, end=end_date)
+        benchmark_data = yf.download('^GSPC', start=start_date, end=end_date, progress=False)
+        if isinstance(benchmark_data.columns, pd.MultiIndex):
+            benchmark_data.columns = benchmark_data.columns.droplevel(1)
 
-        # Calcular el rendimiento del índice de referencia (S&P 500)
-        benchmark_returns = benchmark_data['Adj Close'].pct_change().dropna()
+        # Calcular el rendimiento del índice de referencia (S&P 500).
+        # yfinance ajusta por defecto desde la 1.x y ya no expone 'Adj Close',
+        # asi que 'Close' es la serie ajustada.
+        benchmark_returns = benchmark_data['Close'].pct_change().dropna()
 
 
         if selected_category == 'Performance':
@@ -583,21 +587,71 @@ if page == "Implied Volatility":
     investment decisions.
     """)
 
-    # URL del archivo CSV
-    url = "https://research-watchlists.s3.amazonaws.com/df_UniversidadPanamericana_ohlc.csv"
+    # El endpoint regional va primero: el host virtual del bucket
+    # (research-watchlists.s3.amazonaws.com) no completa el handshake TLS en
+    # algunas redes y tumbaba la seccion entera con un error de SSL.
+    URLS_CSV = (
+        "https://s3.us-east-1.amazonaws.com/research-watchlists/df_UniversidadPanamericana_ohlc.csv",
+        "https://research-watchlists.s3.amazonaws.com/df_UniversidadPanamericana_ohlc.csv",
+    )
+    CSV_LOCAL = "df_UniversidadPanamericana_ohlc.csv"
 
-    # Leer datos del archivo CSV
-    df = pd.read_csv(url)
+    @st.cache_data(ttl=3600, show_spinner="Downloading market data...")
+    def cargar_ohlc():
+        """Descarga el CSV una vez por hora y lo deja en cache.
 
-    # Convertir la columna de tiempo a formato datetime
-    df['time'] = pd.to_datetime(df['time'])
+        Antes se bajaba entero (~25 mil filas) en cada rerun de Streamlit, lo
+        que hacia la app lenta y provocaba fallos intermitentes de descarga.
+        Si ninguna URL responde, se usa la copia incluida en el repo para que
+        la seccion siga navegable, avisando que los datos no son recientes.
+        """
+        ultimo_error = None
+        for url in URLS_CSV:
+            try:
+                respuesta = requests.get(url, timeout=30)
+                respuesta.raise_for_status()
+                datos = pd.read_csv(BytesIO(respuesta.content))
+                datos['time'] = pd.to_datetime(datos['time'])
+                return datos, None
+            except Exception as e:
+                ultimo_error = e
 
-    start_date = dt.datetime(2023, 5, 1)
-    end_date = dt.datetime(2024, 5, 31)
+        try:
+            datos = pd.read_csv(CSV_LOCAL)
+            datos['time'] = pd.to_datetime(datos['time'])
+            return datos, str(ultimo_error)
+        except Exception:
+            raise RuntimeError(f"Could not load the market data: {ultimo_error}")
+
+    try:
+        df, aviso_respaldo = cargar_ohlc()
+    except Exception as e:
+        st.error(f"{e}\n\nCheck your connection and reload the page.")
+        st.stop()
+
+    if aviso_respaldo:
+        st.warning(
+            "Could not reach the live data source, showing the copy bundled "
+            f"with the repository instead. Reason: {aviso_respaldo}"
+        )
+
+    # El CSV es una ventana movil de ~1 ano, asi que el rango se toma de los
+    # propios datos. Fijarlo a mano dejaba la seccion vacia en cuanto la fuente
+    # avanzaba mas alla de la fecha escrita en el codigo.
+    start_date = df['time'].min()
+    end_date = df['time'].max()
     df_filtered = df[(df['time'] >= start_date) & (df['time'] <= end_date)]
 
     # Extraer valores únicos del símbolo
     unique_symbols = df_filtered['Symbol'].unique()
+
+    if len(unique_symbols) == 0:
+        st.error(
+            "The source file has no rows in the available date range "
+            f"({df['time'].min():%Y-%m-%d} to {df['time'].max():%Y-%m-%d}). "
+            "Nothing to plot."
+        )
+        st.stop()
 
     st.markdown("## Stock Price")
     # Crear un cuadro de selección para elegir un símbolo
@@ -666,9 +720,7 @@ if page == "Implied Volatility":
     st.plotly_chart(fig_macd, use_container_width=True)
     
 #PRECIOS NORMALIZADOS
-    # Filtrar datos para el período desde mayo de 2023 hasta mayo de 2024
-    start_date = dt.datetime(2023, 5, 8)
-    end_date = dt.datetime(2024, 5, 6)
+    # Mismo criterio que arriba: el rango sale de los datos, no de fechas fijas.
     df_filtered = df[(df['time'] >= start_date) & (df['time'] <= end_date)]
 
     # Obtener tickers únicos para el gráfico de línea múltiple
@@ -766,11 +818,30 @@ if page == "Implied Volatility":
 
 #VIX PLOT
 # Descargar los datos del VIX
-    # Obtener la fecha actual
-    end_date = datetime.now().strftime("%Y-%m-%d")
+    # Nombre propio para no pisar el end_date (Timestamp) que usan los filtros
+    # del CSV mas arriba.
+    end_date_vix = datetime.now().strftime("%Y-%m-%d")
 
-    # Descargar los datos del VIX con la fecha actual como end date
-    vix_data = yf.download("^VIX", start="2023-05-08", end=end_date)
+    @st.cache_data(ttl=1800, show_spinner=False)
+    def descargar_vix(inicio, fin):
+        """Baja el VIX y aplana las columnas.
+
+        yfinance 1.x devuelve un MultiIndex (metrica, ticker) aunque se pida un
+        solo simbolo, asi que vix_data['Close'] pasaba a ser un DataFrame en vez
+        de una Serie y rompia el resto del bloque.
+        """
+        datos = yf.download("^VIX", start=inicio, end=fin, progress=False, auto_adjust=False)
+        if isinstance(datos.columns, pd.MultiIndex):
+            datos.columns = datos.columns.droplevel(1)
+        return datos
+
+    # Arranca donde arrancan los datos del CSV para que ambas series cubran el
+    # mismo periodo.
+    vix_data = descargar_vix(start_date.strftime("%Y-%m-%d"), end_date_vix)
+
+    if vix_data.empty:
+        st.warning("Yahoo Finance returned no VIX data (it may be rate limiting). Skipping the VIX chart.")
+        st.stop()
 
     # Obtener el último precio del VIX
     latest_vix_price = vix_data['Close'].iloc[-1]
@@ -807,8 +878,8 @@ if page == "Implied Volatility":
     # Filtrar los datos relevantes para el segundo símbolo seleccionado
     selected_data_2 = df_filtered[df_filtered['Symbol'] == selected_symbol_2]
 
-    # Descargar los datos del VIX para el período correspondiente
-    vix_data = yf.download("^VIX", start=start_date, end=end_date)
+    # Reutiliza el helper cacheado: mismas columnas planas y una sola descarga.
+    vix_data = descargar_vix(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
 
     # Fusionar los datos de la volatilidad implícita y el VIX
     merged_data = pd.merge(selected_data_2, vix_data, how='inner', left_on='time', right_index=True)

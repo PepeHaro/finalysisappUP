@@ -824,23 +824,30 @@ if page == "Implied Volatility":
 
     @st.cache_data(ttl=1800, show_spinner=False)
     def descargar_vix(inicio, fin):
-        """Baja el VIX y aplana las columnas.
+        """Baja el VIX, reintentando, y aplana las columnas.
 
-        yfinance 1.x devuelve un MultiIndex (metrica, ticker) aunque se pida un
-        solo simbolo, asi que vix_data['Close'] pasaba a ser un DataFrame en vez
-        de una Serie y rompia el resto del bloque.
+        Dos detalles de yfinance 1.x: devuelve un MultiIndex (metrica, ticker)
+        aunque se pida un solo simbolo — por eso vix_data['Close'] pasaba a ser
+        un DataFrame en vez de una Serie —, y ante un 429 de Yahoo devuelve un
+        frame vacio en vez de fallar. Se reintenta con espera creciente y se
+        lanza excepcion si no llega nada, porque devolver el frame vacio lo
+        dejaria cacheado media hora.
         """
-        datos = yf.download("^VIX", start=inicio, end=fin, progress=False, auto_adjust=False)
-        if isinstance(datos.columns, pd.MultiIndex):
-            datos.columns = datos.columns.droplevel(1)
-        return datos
+        for intento in range(4):
+            datos = yf.download("^VIX", start=inicio, end=fin, progress=False, auto_adjust=False)
+            if not datos.empty:
+                if isinstance(datos.columns, pd.MultiIndex):
+                    datos.columns = datos.columns.droplevel(1)
+                return datos
+            time.sleep(2 ** intento)
+        raise RuntimeError("Yahoo Finance returned no VIX data after several attempts.")
 
     # Arranca donde arrancan los datos del CSV para que ambas series cubran el
     # mismo periodo.
-    vix_data = descargar_vix(start_date.strftime("%Y-%m-%d"), end_date_vix)
-
-    if vix_data.empty:
-        st.warning("Yahoo Finance returned no VIX data (it may be rate limiting). Skipping the VIX chart.")
+    try:
+        vix_data = descargar_vix(start_date.strftime("%Y-%m-%d"), end_date_vix)
+    except Exception as e:
+        st.warning(f"{e} Yahoo is likely rate limiting; reload in a minute to see the VIX charts.")
         st.stop()
 
     # Obtener el último precio del VIX

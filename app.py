@@ -68,8 +68,8 @@ if page == "Company Overview":
 
             # Obtener el precio en tiempo real y los datos de hoy
             todays_data = company.history(period='1d')
-            current_price = todays_data['Close'][0]
-            open_price = todays_data['Open'][0]
+            current_price = todays_data['Close'].iloc[0]
+            open_price = todays_data['Open'].iloc[0]
             price_change = current_price - open_price
             percent_change = (price_change / open_price) * 100
 
@@ -238,7 +238,17 @@ if page == "Company Overview":
                 st.write(f"Free Cash Flow data for {ticker} is not available.")
 
         except Exception as e:
-            st.warning(f"Please type the correct ticker. Error: {str(e)}")
+            # Yahoo responde 429 cuando se excede su limite de peticiones. En ese
+            # caso el cuerpo viene vacio y falla al parsear como JSON, asi que el
+            # mensaje generico de "ticker incorrecto" era enganoso.
+            msg = str(e)
+            if "429" in msg or "Too Many Requests" in msg or "Expecting value" in msg:
+                st.warning(
+                    "Yahoo Finance is rate limiting the requests (HTTP 429). "
+                    "Wait a minute and try again — the ticker is probably fine."
+                )
+            else:
+                st.warning(f"Please type the correct ticker. Error: {msg}")
             
 # SECTOR DASHBOARD
 if page == "Sector Dashboard":

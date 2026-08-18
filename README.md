@@ -26,19 +26,6 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Configuración
-
-Los tokens de la API de FinViz Elite van en `.streamlit/secrets.toml`, que **no** se sube al repo:
-
-```toml
-token1 = "..."
-token2 = "..."
-```
-
-En Streamlit Cloud se configuran desde el panel de la app (Settings → Secrets), no en el código.
-
-> Si Streamlit no encuentra los tokens, verifica que el archivo esté en `.streamlit/secrets.toml` y no en la raíz del proyecto.
-
 ## Fuentes de datos
 
 - **Yahoo Finance** (vía `yfinance`) — precios, fundamentales y VIX
